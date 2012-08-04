@@ -1,15 +1,10 @@
 require 'puppet/ssl'
+require 'puppet/util/seconds'
 
 # The tedious class that does all the manipulations to the
 # certificate to correctly sign it.  Yay.
 module Puppet::SSL::CertificateFactory
-  # How we convert from various units to the required seconds.
-  UNITMAP = {
-    "y" => 365 * 24 * 60 * 60,
-    "d" => 24 * 60 * 60,
-    "h" => 60 * 60,
-    "s" => 1
-  }
+  extend Puppet::Util::Seconds
 
   def self.build(cert_type, csr, issuer, serial)
     # Work out if we can even build the requested type of certificate.
@@ -90,11 +85,8 @@ module Puppet::SSL::CertificateFactory
   def self.ttl
     ttl = Puppet.settings[:ca_ttl]
 
-    return ttl unless ttl.is_a?(String)
-
-    raise ArgumentError, "Invalid ca_ttl #{ttl}" unless ttl =~ /^(\d+)(y|d|h|s)$/
-
-    $1.to_i * UNITMAP[$2]
+    # to_seconds will raise an error with the given message if the value is invalid
+    to_seconds ttl, "Invalid ca_ttl '#{ttl}'"
   end
 
   # Woot! We're a CA.
