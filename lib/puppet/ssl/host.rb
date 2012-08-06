@@ -4,6 +4,8 @@ require 'puppet/ssl/key'
 require 'puppet/ssl/certificate'
 require 'puppet/ssl/certificate_request'
 require 'puppet/ssl/certificate_revocation_list'
+require 'puppet/ssl/certificate_factory'
+require 'puppet/util/seconds'
 
 # The class that manages all aspects of our SSL certificates --
 # private keys, public keys, requests, etc.
@@ -200,6 +202,9 @@ class Puppet::SSL::Host
       return nil unless @certificate = Certificate.indirection.find(name)
 
       validate_certificate_with_key
+
+      # The cert is valid, now check for an upcoming expiration
+      check_expiration
     end
     @certificate
   end
@@ -218,6 +223,28 @@ On the agent:
   rm -f #{Puppet[:hostcert]}
   puppet agent -t
 ERROR_STRING
+    end
+  end
+
+  # Log a warning if the cert is close to expiring
+  def check_expiration
+    setting = Puppet[:certificate_expire_warning]
+    lead_time = Puppet::Util::Seconds.to_seconds setting, "Invalid certificate_expire_warning '#{setting}'"
+    expire_time = certificate.expiration
+
+    type = case
+    when ca?
+      "CA"
+    when Puppet.run_mode.master?
+      "Master"
+    else
+      "Agent"
+    end
+
+    # Don't bother with a warning if the ca_ttl setting is shorter than the expire warning setting,
+    # it probably means there's some testing going on
+    if lead_time < Puppet::SSL::CertificateFactory.ttl and expire_time < Time.now.utc + lead_time
+      Puppet.warning "#{type} certificate will expire on #{expire_time.strftime('%Y-%m-%dT%H:%M:%S%Z')}"
     end
   end
 

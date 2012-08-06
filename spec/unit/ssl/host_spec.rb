@@ -226,6 +226,52 @@ describe Puppet::SSL::Host do
     lambda{ host.validate_certificate_with_key }.should_not raise_error
   end
 
+  it "should be able to log a warning when the certificate expiration is approaching" do
+    Puppet::SSL::Host.new("foo").should respond_to(:check_expiration)
+  end
+
+  it "should log a warning when checking the certificate expiration is approaching" do
+    host = Puppet::SSL::Host.new("foo")
+    certificate = mock 'cert', :expiration  => Time.now.utc() + 30*24*60*60
+    host.stubs(:certificate).returns certificate
+    Puppet[:certificate_expire_warning] = 60*24*60*60
+    Puppet[:ca_ttl] = 365*24*60*60
+    Puppet.expects :warning
+    host.check_expiration
+  end
+
+  it "should not log a warning if the certificate is not going to expire within `certificate_expire_warning`" do
+    host = Puppet::SSL::Host.new("foo")
+    certificate = mock 'cert', :expiration  => Time.now.utc() + 60*24*60*60
+    host.stubs(:certificate).returns certificate
+    Puppet[:certificate_expire_warning] = 30*24*60*60
+    Puppet[:ca_ttl] = 365*24*60*60
+    Puppet.expects(:warning).never
+    host.check_expiration
+  end
+
+  it "should not log a warning when `ca_ttl` value is less than `certificate_expire_warning`" do
+    host = Puppet::SSL::Host.new("foo")
+    certificate = mock 'cert', :expiration  => Time.now.utc() + 365*24*60*60
+    host.stubs(:certificate).returns certificate
+    Puppet[:certificate_expire_warning] = 60*24*60*60
+    Puppet[:ca_ttl] = 30*24*60*60
+    Puppet.expects(:warning).never
+    host.check_expiration
+  end
+
+  it "should check expiration of its certificate upon initializing it" do
+    host = Puppet::SSL::Host.new("foo")
+    host.stubs(:key).returns mock("key")
+    host.stubs(:validate_certificate_with_key)
+    certificate = mock 'cert', :expiration  => Time.now.utc() + 30*24*60*60
+    Puppet::SSL::Certificate.indirection.stubs(:find).returns certificate
+    Puppet[:certificate_expire_warning] = 60*24*60*60
+    Puppet[:ca_ttl] = 365*24*60*60
+    Puppet.expects :warning
+    host.certificate
+  end
+
   describe "when specifying the CA location" do
     it "should support the location ':local'" do
       lambda { Puppet::SSL::Host.ca_location = :local }.should_not raise_error
@@ -499,6 +545,7 @@ describe Puppet::SSL::Host do
       @cert = stub 'cert', :content => @realcert
       @host.stubs(:key).returns mock("key")
       @host.stubs(:validate_certificate_with_key)
+      @host.stubs(:check_expiration)
     end
 
     it "should find the CA certificate if it does not have a certificate" do
