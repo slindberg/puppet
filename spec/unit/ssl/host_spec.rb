@@ -496,7 +496,7 @@ describe Puppet::SSL::Host do
   describe "when managing its certificate" do
     before do
       @realcert = mock 'certificate'
-      @cert = stub 'cert', :content => @realcert
+      @cert = stub 'cert', :content => @realcert, :check_expiration => nil
       @host.stubs(:key).returns mock("key")
       @host.stubs(:validate_certificate_with_key)
     end

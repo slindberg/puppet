@@ -565,6 +565,12 @@ EOT
         :type     => :boolean,
         :desc     => "Whether certificate revocation should be supported by downloading a Certificate Revocation List (CRL)
             to all clients.  If enabled, CA chaining will almost definitely not work.",
+    },
+    :certificate_expire_warning => {
+      :default  => 3*30*24*60*60,
+      :desc     => "The window of time leading up to a certificate's expiration that a notification \n" <<
+                   "will be logged. This applies to CA, master, and agent certificates. Valid \n" <<
+                   "values follow the same rules as the `ca_ttl` setting. Defaults to (roughly) 3 months."
     }
   )
 
