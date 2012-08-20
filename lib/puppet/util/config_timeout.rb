@@ -15,6 +15,6 @@ module Puppet::Util::ConfigTimeout
     # to_seconds will raise an eror if anything other than an Integer or parsable
     # string are given (this also allows this setting to be specified using units
     # like 'd', 'h', 's', which can't hurt)
-    to_seconds timeout, "Configuration timeout must be an integer, '#{timeout}' given"
+    to_seconds timeout, "Configuration timeout must be specified in seconds format (see `ca_ttl` setting), '#{timeout}' given"
   end
 end
