@@ -15,16 +15,18 @@ module Puppet::Util::Seconds
   # Convert a value to seconds (an integer), parse a numeric string with
   # units if necessary. This method is probably not worth a monkeypatch.
   def to_seconds(value, err = nil)
-    return value if value.is_a? Integer
-
-    if value.is_a? String and value =~ /^(\d+)(y|d|h|s)?$/
-      return $1.to_i * UNITMAP[$2 || 's']
+    case
+    when value.is_a?(Integer)
+      value
+    when (value.is_a?(String) and value =~ /^(\d+)(y|d|h|s)?$/)
+      $1.to_i * UNITMAP[$2 || 's']
+    when err
+      # If the value is some other type (e.g. Time), it could have a to_i
+      # method that doesn't make sense, so we can't just return it.
+      raise ArgumentError, err
+    else
+      # If an error string was not supplied, just return a falsy value.
+      nil
     end
-
-    # If an error string was supplied, raise an error instead of returning nil
-    raise ArgumentError, err if err
-
-    # If the value is some other type (e.g. Time), it could have a
-    # to_i method that doesn't return a helpful value, so return nil.
   end
 end
