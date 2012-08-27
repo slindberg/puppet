@@ -16,6 +16,8 @@ describe "Puppet::Network::HTTP::RackREST", :if => Puppet.features.rack? do
   end
 
   describe "when serving a request" do
+    include PuppetSpec::Files
+
     before :all do
       @model_class = stub('indirected model class')
       Puppet::Indirector::Indirection.stubs(:model).with(:foo).returns(@model_class)
@@ -55,6 +57,13 @@ describe "Puppet::Network::HTTP::RackREST", :if => Puppet.features.rack? do
       it "should return the request body as the body" do
         req = mk_req('/foo/bar', :input => 'mybody')
         @handler.body(req).should == "mybody"
+      end
+
+      it "should return the an OpenSSL::X509::Certificate instance as the client_cert" do
+        Puppet[:confdir] = tmpdir('conf')
+        cert = Puppet::SSL::CertificateAuthority.new.generate('foo', :dns_alt_names => 'foo,bar,baz').content
+        req = mk_req('/foo/bar', 'SSL_CLIENT_CERT' => cert.to_pem)
+        @handler.client_cert(req).should be_an_instance_of(OpenSSL::X509::Certificate)
       end
 
       it "should set the response's content-type header when setting the content type" do

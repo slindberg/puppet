@@ -125,6 +125,18 @@ describe Puppet::Network::HTTP::Handler do
       @handler.request_format(@request).should == "s"
     end
 
+    it "should check authentication when finding nodes" do
+      # @handler.expects(:format_to_use).returns(@oneformat)
+    @format = stub 'format', :suitable? => true, :mime => "text/format", :name => "format"
+      Puppet::Network::FormatHandler.stubs(:format).returns @format
+      @oneformat = stub 'one', :suitable? => true, :mime => "text/one", :name => "one"
+      Puppet::Network::FormatHandler.stubs(:format).with("one").returns @oneformat
+      @indirection.stubs(:find).returns @result
+      @handler.stubs(:model).with('node').returns(stub 'indirector', :indirection => @indirection)
+      @handler.expects(:check_authentication).once
+      @handler.do_find("node", "my_result", {}, @request, @response)
+    end
+
     describe "when finding a model instance" do
       before do
         @indirection.stubs(:find).returns @result

@@ -79,6 +79,12 @@ class Puppet::Network::HTTP::RackREST < Puppet::Network::HTTP::RackHttpHandler
     request.body.read
   end
 
+  def client_cert(request)
+    # This is the environment variable that mod_ssl sets
+    return nil unless cert = request.env['SSL_CLIENT_CERT']
+    OpenSSL::X509::Certificate.new(cert)
+  end
+
   def extract_client_info(request)
     result = {}
     result[:ip] = request.ip
