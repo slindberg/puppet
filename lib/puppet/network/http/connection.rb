@@ -1,6 +1,7 @@
 require 'net/https'
 require 'puppet/ssl/host'
 require 'puppet/ssl/configuration'
+require 'puppet/network/http/response'
 
 module Puppet::Network::HTTP
 
@@ -42,7 +43,7 @@ module Puppet::Network::HTTP
     end
 
     def request(method, *args)
-      peer_certs = []
+      certificates = {}
       verify_errors = []
 
       connection.verify_callback = proc do |preverify_ok, ssl_context|
@@ -50,7 +51,8 @@ module Puppet::Network::HTTP
         # constructing the error message if the verification failed.
         # This is necessary since we don't have direct access to the
         # cert that we expected the connection to use otherwise.
-        peer_certs << Puppet::SSL::Certificate.from_instance(ssl_context.current_cert)
+        cert = Puppet::SSL::Certificate.from_instance(ssl_context.current_cert)
+        certificates[cert.name =~ /^puppet ca/i ? :ca_cert : :peer_cert] = cert
         # And also keep the detailed verification error if such an error occurs
         if ssl_context.error_string and not preverify_ok
           verify_errors << "#{ssl_context.error_string} for #{ssl_context.current_cert.subject}"
@@ -58,14 +60,17 @@ module Puppet::Network::HTTP
         preverify_ok
       end
 
-      connection.send(method, *args)
+      response = connection.send(method, *args)
+
+      # Create a new special response object to give access to the connection and certs
+      Puppet::Network::HTTP::Response.new(response, connection, certificates)
     rescue OpenSSL::SSL::SSLError => error
       if error.message.include? "certificate verify failed"
         msg = error.message
         msg << ": [" + verify_errors.join('; ') + "]"
         raise Puppet::Error, msg
       elsif error.message =~ /hostname (was )?not match/
-        raise unless cert = peer_certs.find { |c| c.name !~ /^puppet ca/i }
+        raise unless cert = certificates[:peer_cert]
 
         valid_certnames = [cert.name, *cert.subject_alt_names].uniq
         msg = valid_certnames.length > 1 ? "one of #{valid_certnames.join(', ')}" : valid_certnames.first

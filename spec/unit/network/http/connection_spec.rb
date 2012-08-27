@@ -241,4 +241,38 @@ describe Puppet::Network::HTTP::Connection do
       end.to raise_error(/some other message/)
     end
   end
+
+  context "when returning a response from a request" do
+    include PuppetSpec::Files
+
+    let(:net_response) { Net::HTTPOK.new('1.1', 200, '') }
+    let(:connection) { Net::HTTP.new('my_server', 8140) }
+
+    before do
+      connection.stubs(:get).returns(net_response)
+      subject.stubs(:create_connection).returns(connection)
+    end
+
+    it "should wrap the response in a Puppet response object" do
+      Puppet::Network::HTTP::Response.expects(:new).with(net_response, connection, {})
+      subject.request(:get)
+    end
+
+    it "should make the connection and CA/peer certs available" do
+      Puppet[:confdir] = tmpdir('conf')
+      ca_cert = Puppet::SSL::CertificateAuthority.new.generate('puppet ca: foo').content
+      peer_cert = Puppet::SSL::CertificateAuthority.new.generate('foo').content
+
+      connection.stubs(:get).with do
+        connection.verify_callback.call(true, stub('sslcontext', :current_cert => ca_cert, :error_string => false))
+        connection.verify_callback.call(true, stub('sslcontext', :current_cert => peer_cert, :error_string => false))
+        true
+      end
+
+      response = subject.request(:get)
+      response.session.should == connection
+      response.ca_cert.content.should == ca_cert
+      response.peer_cert.content.should == peer_cert
+    end
+  end
 end
