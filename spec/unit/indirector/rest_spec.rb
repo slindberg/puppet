@@ -310,6 +310,15 @@ describe Puppet::Indirector::REST do
       @searcher.expects(:deserialize).raises(ArgumentError)
       lambda { @searcher.find(@request) }.should raise_error(ArgumentError)
     end
+
+    it "should check authentication if the indirection is 'node'" do
+      @request = Puppet::Indirector::Request.new(:node, :find, "foo bar", nil, :environment => "myenv")
+      @response.stubs(:ca_cert).returns('ca_cert')
+      @response.stubs(:peer_cert).returns('peer_cert')
+      @searcher.stubs(:do_request).returns(@response)
+      @searcher.expects(:check_authentication).with('ca_cert', 'peer_cert')
+      @searcher.find(@request)
+    end
   end
 
   describe "when doing a head" do

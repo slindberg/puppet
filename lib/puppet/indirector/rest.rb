@@ -4,11 +4,13 @@ require 'uri'
 require 'puppet/network/http_pool'
 require 'puppet/network/http/api/v1'
 require 'puppet/network/http/compression'
+require 'puppet/network/authentication'
 
 # Access objects via REST
 class Puppet::Indirector::REST < Puppet::Indirector::Terminus
   include Puppet::Network::HTTP::API::V1
   include Puppet::Network::HTTP::Compression.module
+  include Puppet::Network::Authentication
 
   class << self
     attr_reader :server_setting, :port_setting
@@ -119,6 +121,10 @@ class Puppet::Indirector::REST < Puppet::Indirector::Terminus
       end
     end
     result = deserialize(response)
+
+    # If this is the standard node request, check certificates (this is so that the
+    # logs aren't spammed with warnings since there are multiple requests per run)
+    check_authentication response.ca_cert, response.peer_cert if request.indirection_name == :node
 
     return nil unless result
 
