@@ -1,6 +1,5 @@
 require 'puppet/ssl/base'
 require 'puppet/ssl/certificate_factory'
-require 'puppet/util/seconds'
 
 # Manage certificates themselves.  This class has no
 # 'generate' method because the CA is responsible
@@ -33,13 +32,12 @@ class Puppet::SSL::Certificate < Puppet::SSL::Base
 
   # Log a warning if the cert is close to expiring
   def check_expiration
-    setting = Puppet[:certificate_expire_warning]
-    lead_time = Puppet::Util::Seconds.to_seconds setting, "Invalid certificate_expire_warning '#{setting}'"
+    lead_time = Puppet[:certificate_expire_warning]
     identifier = self.class.name_from_subject(content.subject)
 
     # Don't bother with a warning if the ca_ttl setting is shorter than the expire warning setting,
     # it probably means there's some testing going on
-    if lead_time < Puppet::SSL::CertificateFactory.ttl and expiration < Time.now.utc + lead_time
+    if lead_time < Puppet.settings[:ca_ttl] and expiration < Time.now.utc + lead_time
       Puppet.warning "Certificate '#{identifier}' will expire on #{expiration.strftime('%Y-%m-%dT%H:%M:%S%Z')}"
     end
   end
