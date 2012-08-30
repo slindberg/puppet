@@ -152,47 +152,27 @@ describe Puppet::SSL::Certificate do
     end
   end
 
-  it "should be able to log a warning when the certificate expiration is approaching" do
-    @class.new("foo").should respond_to(:check_expiration)
-  end
-
-  describe "when checking the certificate's expiration" do
+  describe "when checking if the certificate's expiration is approaching" do
     before do
-      @certificate = @class.new("myname")
-      @certificate.stubs(:content).returns stub('content', :subject => 'foo')
       @days = 24*60*60
-    end
-
-    it "should log a warning if expiration is approaching" do
+      @certificate = @class.new("myname")
       @certificate.stubs(:expiration).returns(Time.now.utc() + 30*@days)
-      Puppet[:certificate_expire_warning] = 60*@days
-      Puppet[:ca_ttl] = 365*@days
-      Puppet.expects :warning
-      @certificate.check_expiration
     end
 
-    it "should not log a warning if it is not going to expire within `certificate_expire_warning`" do
-      @certificate.stubs(:expiration).returns(Time.now.utc() + 60*@days)
-      Puppet[:certificate_expire_warning] = 30*@days
-      Puppet[:ca_ttl] = 365*@days
-      Puppet.expects(:warning).never
-      @certificate.check_expiration
+    it "should be true if the expiration is within the given interval from now" do
+      @certificate.near_expiration?(31*@days).should be_true
     end
 
-    it "should not log a warning when `ca_ttl` value is less than `certificate_expire_warning`" do
-      @certificate.stubs(:expiration).returns(Time.now.utc() + 365*@days)
-      Puppet[:certificate_expire_warning] = 60*@days
-      Puppet[:ca_ttl] = 30*@days
-      Puppet.expects(:warning).never
-      @certificate.check_expiration
+    it "should be false if there is no expiration" do
+      @certificate.stubs(:expiration).returns(nil)
+      @certificate.near_expiration?.should be_false
     end
 
-    it "should use the name from the subject in the warning" do
-      @certificate.stubs(:expiration).returns(Time.now.utc() + 30*@days)
-      Puppet[:certificate_expire_warning] = 60*@days
-      Puppet[:ca_ttl] = 365*@days
-      Puppet.expects(:warning).with { |message| message.include? 'foo' }
-      @certificate.check_expiration
+    it "should default to using the `certificate_expire_warning` setting as the interval" do
+      Puppet[:certificate_expire_warning] = 31*@days
+      @certificate.near_expiration?.should be_true
+      Puppet[:certificate_expire_warning] = 29*@days
+      @certificate.near_expiration?.should be_false
     end
   end
 end

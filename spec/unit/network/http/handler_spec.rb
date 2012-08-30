@@ -2,6 +2,7 @@
 require 'spec_helper'
 require 'puppet/network/http/handler'
 require 'puppet/network/authorization'
+require 'puppet/network/authentication'
 
 class HttpHandled
   include Puppet::Network::HTTP::Handler
@@ -51,6 +52,7 @@ describe Puppet::Network::HTTP::Handler do
       @result = stub 'result', :render => "mytext"
 
       @handler.stubs(:check_authorization)
+      @handler.stubs(:warn_if_near_expiration)
 
       stub_server_interface
     end
@@ -66,6 +68,16 @@ describe Puppet::Network::HTTP::Handler do
       @handler.stubs(:http_method        ).returns("GET")
       @handler.stubs(:params             ).returns({})
       @handler.stubs(:content_type       ).returns("text/plain")
+      @handler.stubs(:client_cert        ).returns(nil)
+    end
+
+    it "should check the client certificate for upcoming expiration" do
+      cert = mock 'cert'
+      @handler.stubs(:uri2indirection).returns(["facts", :mymethod, "key", {:node => "name"}])
+      @handler.expects(:client_cert).returns(cert).with(@request)
+      @handler.expects(:warn_if_near_expiration).with(cert)
+
+      @handler.process(@request, @response)
     end
 
     it "should create an indirection request from the path, parameters, and http method" do
@@ -123,18 +135,6 @@ describe Puppet::Network::HTTP::Handler do
     it "should still find the correct format if content type contains charset information" do
       @handler.stubs(:content_type_header).returns "text/plain; charset=UTF-8"
       @handler.request_format(@request).should == "s"
-    end
-
-    it "should check authentication when finding nodes" do
-      # @handler.expects(:format_to_use).returns(@oneformat)
-    @format = stub 'format', :suitable? => true, :mime => "text/format", :name => "format"
-      Puppet::Network::FormatHandler.stubs(:format).returns @format
-      @oneformat = stub 'one', :suitable? => true, :mime => "text/one", :name => "one"
-      Puppet::Network::FormatHandler.stubs(:format).with("one").returns @oneformat
-      @indirection.stubs(:find).returns @result
-      @handler.stubs(:model).with('node').returns(stub 'indirector', :indirection => @indirection)
-      @handler.expects(:check_authentication).once
-      @handler.do_find("node", "my_result", {}, @request, @response)
     end
 
     describe "when finding a model instance" do

@@ -1,7 +1,5 @@
 require 'net/https'
-require 'puppet/ssl/host'
-require 'puppet/ssl/configuration'
-require 'puppet/network/http/response'
+require 'puppet/network/authentication'
 
 module Puppet::Network::HTTP
 
@@ -15,6 +13,7 @@ module Puppet::Network::HTTP
   # * Provides some useful error handling for any SSL errors that occur
   #   during a request.
   class Connection
+    include Puppet::Network::Authentication
 
     def initialize(host, port, use_ssl = true)
       @host = host
@@ -43,7 +42,7 @@ module Puppet::Network::HTTP
     end
 
     def request(method, *args)
-      certificates = {}
+      peer_certs = []
       verify_errors = []
 
       connection.verify_callback = proc do |preverify_ok, ssl_context|
@@ -51,8 +50,7 @@ module Puppet::Network::HTTP
         # constructing the error message if the verification failed.
         # This is necessary since we don't have direct access to the
         # cert that we expected the connection to use otherwise.
-        cert = Puppet::SSL::Certificate.from_instance(ssl_context.current_cert)
-        certificates[cert.name =~ /^puppet ca/i ? :ca_cert : :peer_cert] = cert
+        peer_certs << Puppet::SSL::Certificate.from_instance(ssl_context.current_cert)
         # And also keep the detailed verification error if such an error occurs
         if ssl_context.error_string and not preverify_ok
           verify_errors << "#{ssl_context.error_string} for #{ssl_context.current_cert.subject}"
@@ -62,15 +60,18 @@ module Puppet::Network::HTTP
 
       response = connection.send(method, *args)
 
-      # Create a new special response object to give access to the connection and certs
-      Puppet::Network::HTTP::Response.new(response, connection, certificates)
+      # Now that the request completed successfully, lets check the involved
+      # certificates for approaching expiration dates
+      warn_if_near_expiration(*peer_certs)
+
+      response
     rescue OpenSSL::SSL::SSLError => error
       if error.message.include? "certificate verify failed"
         msg = error.message
         msg << ": [" + verify_errors.join('; ') + "]"
         raise Puppet::Error, msg
       elsif error.message =~ /hostname (was )?not match/
-        raise unless cert = certificates[:peer_cert]
+        raise unless cert = peer_certs.find { |c| c.name !~ /^puppet ca/i }
 
         valid_certnames = [cert.name, *cert.subject_alt_names].uniq
         msg = valid_certnames.length > 1 ? "one of #{valid_certnames.join(', ')}" : valid_certnames.first
@@ -148,7 +149,7 @@ module Puppet::Network::HTTP
 
     # Use cert information from a Puppet client to set up the http object.
     def cert_setup
-      if FileTest.exist?(Puppet[:hostcert]) and FileTest.exist?(ssl_configuration.ca_auth_file)
+      if host_cert_exists? and ca_cert_exists?
         @connection.cert_store  = ssl_host.ssl_store
         @connection.ca_file     = ssl_configuration.ca_auth_file
         @connection.cert        = ssl_host.certificate.content
@@ -171,19 +172,6 @@ module Puppet::Network::HTTP
     # mock the actual HTTP connection.
     def create_connection(*args)
       Net::HTTP.new(*args)
-    end
-
-    # Use the global localhost instance.
-    def ssl_host
-      Puppet::SSL::Host.localhost
-    end
-
-    def ssl_configuration
-      @ssl_configuration ||= Puppet::SSL::Configuration.new(
-          Puppet[:localcacert],
-          :ca_chain_file => Puppet[:ssl_client_ca_chain],
-          :ca_auth_file  => Puppet[:ssl_client_ca_auth]
-      )
     end
   end
 end

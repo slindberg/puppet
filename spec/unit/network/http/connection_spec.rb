@@ -1,6 +1,7 @@
 #! /usr/bin/env ruby -S rspec
 require 'spec_helper'
 require 'puppet/network/http/connection'
+require 'puppet/network/authentication'
 
 describe Puppet::Network::HTTP::Connection do
 
@@ -189,6 +190,7 @@ describe Puppet::Network::HTTP::Connection do
 
     def a_connection_that_verifies(args)
       connection = Net::HTTP.new(host, port)
+      connection.stubs(:warn_if_near_expiration)
       connection.stubs(:get).with do
         connection.verify_callback.call(args[:has_passed_pre_checks], args[:in_context])
         true
@@ -240,39 +242,24 @@ describe Puppet::Network::HTTP::Connection do
         subject.request(:get, stub('request'))
       end.to raise_error(/some other message/)
     end
-  end
 
-  context "when returning a response from a request" do
-    include PuppetSpec::Files
-
-    let(:net_response) { Net::HTTPOK.new('1.1', 200, '') }
-    let(:connection) { Net::HTTP.new('my_server', 8140) }
-
-    before do
-      connection.stubs(:get).returns(net_response)
+    it "should check all peer certificates for upcoming expiration" do
+      connection = Net::HTTP.new('my_server', 8140)
       subject.stubs(:create_connection).returns(connection)
-    end
 
-    it "should wrap the response in a Puppet response object" do
-      Puppet::Network::HTTP::Response.expects(:new).with(net_response, connection, {})
-      subject.request(:get)
-    end
-
-    it "should make the connection and CA/peer certs available" do
-      Puppet[:confdir] = tmpdir('conf')
-      ca_cert = Puppet::SSL::CertificateAuthority.new.generate('puppet ca: foo').content
-      peer_cert = Puppet::SSL::CertificateAuthority.new.generate('foo').content
+      cert = stubs 'cert'
+      Puppet::SSL::Certificate.expects(:from_instance).twice.returns(cert)
 
       connection.stubs(:get).with do
-        connection.verify_callback.call(true, stub('sslcontext', :current_cert => ca_cert, :error_string => false))
-        connection.verify_callback.call(true, stub('sslcontext', :current_cert => peer_cert, :error_string => false))
+        context = a_store_context(:for_server => 'a_server', :with_error_string => false)
+        connection.verify_callback.call(true, context)
+        connection.verify_callback.call(true, context)
         true
       end
 
-      response = subject.request(:get)
-      response.session.should == connection
-      response.ca_cert.content.should == ca_cert
-      response.peer_cert.content.should == peer_cert
+      subject.expects(:warn_if_near_expiration).with(cert, cert)
+
+      subject.request(:get, stubs('request'))
     end
   end
 end

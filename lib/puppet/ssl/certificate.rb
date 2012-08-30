@@ -30,15 +30,16 @@ class Puppet::SSL::Certificate < Puppet::SSL::Base
     content.not_after
   end
 
-  # Log a warning if the cert is close to expiring
-  def check_expiration
-    lead_time = Puppet[:certificate_expire_warning]
-    identifier = self.class.name_from_subject(content.subject)
+  def near_expiration?(interval = nil)
+    return false unless expiration
+    interval ||= Puppet[:certificate_expire_warning]
+    # Certificate expiration timestamps are always in UTC
+    expiration < Time.now.utc + interval
+  end
 
-    # Don't bother with a warning if the ca_ttl setting is shorter than the expire warning setting,
-    # it probably means there's some testing going on
-    if lead_time < Puppet.settings[:ca_ttl] and expiration < Time.now.utc + lead_time
-      Puppet.warning "Certificate '#{identifier}' will expire on #{expiration.strftime('%Y-%m-%dT%H:%M:%S%Z')}"
-    end
+  # This name is what gets extracted from the subject before being passed
+  # to the constructor, so it's not downcased
+  def unmunged_name
+    self.class.name_from_subject(content.subject)
   end
 end

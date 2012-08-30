@@ -5,9 +5,11 @@ require 'thread'
 
 require 'puppet/ssl/certificate'
 require 'puppet/ssl/certificate_revocation_list'
-require 'puppet/ssl/configuration'
+require 'puppet/network/authentication'
 
 class Puppet::Network::HTTP::WEBrick
+  include Puppet::Network::Authentication
+
   def initialize(args = {})
     @listening = false
     @mutex = Mutex.new
@@ -106,14 +108,5 @@ class Puppet::Network::HTTP::WEBrick
     results[:SSLCertificateStore] = host.ssl_store
 
     results
-  end
-
-  private
-
-  def ssl_configuration
-    @ssl_configuration ||= Puppet::SSL::Configuration.new(
-      Puppet[:localcacert],
-      :ca_chain_file => Puppet[:ssl_server_ca_chain],
-      :ca_auth_file  => Puppet[:ssl_server_ca_auth])
   end
 end

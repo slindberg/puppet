@@ -66,6 +66,7 @@ module Puppet::Network::HTTP::Handler
     indirection, method, key, params = uri2indirection(http_method(request), path(request), params(request))
 
     check_authorization(indirection, method, key, params)
+    warn_if_near_expiration(client_cert(request))
 
     send("do_#{method}", indirection, key, params, request, response)
   rescue SystemExit,NoMemoryError
@@ -107,16 +108,6 @@ module Puppet::Network::HTTP::Handler
     unless result = model(indirection_name).indirection.find(key, params)
       Puppet.info("Could not find #{indirection_name} for '#{key}'")
       return do_exception(response, "Could not find #{indirection_name} #{key}", 404)
-    end
-
-    # Check certificates on the agent's first request of a run, which will be for its node
-    if indirection_name == 'node'
-      begin
-        # Attemt to grab the client certificate from the request
-        check_authentication Puppet::SSL::Certificate.from_instance(client_cert(request))
-      rescue NotImplementedError, ArgumentError
-        check_authentication
-      end
     end
 
     # The encoding of the result must include the format to use,
